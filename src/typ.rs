@@ -936,7 +936,7 @@ impl<'a> Typer<'a> {
                 kind,
                 annotation,
                 ..
-            } => self.infer_let(pattern, *value, *then, kind, &annotation, location),
+            } => self.infer_binding(pattern, *value, *then, kind, &annotation, location),
 
             UntypedExpr::Case {
                 location,
@@ -1489,7 +1489,7 @@ impl<'a> Typer<'a> {
         })
     }
 
-    fn infer_let(
+    fn infer_binding(
         &mut self,
         pattern: UntypedPattern,
         value: UntypedExpr,
