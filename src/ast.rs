@@ -592,7 +592,6 @@ pub enum BindingKind {
     Let,
     Assert,
     Try,
-    Clause,
 }
 
 // BitStrings
