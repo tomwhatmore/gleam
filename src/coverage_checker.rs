@@ -150,8 +150,8 @@ enum FactBaseFormula {
 impl fmt::Display for FactBaseFormula {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FactBaseFormula::Union { lhs, rhs } => write!(f, "{} ∧ ({})", lhs, rhs),
-            FactBaseFormula::Intersection { lhs, rhs } => write!(f, "{} ∨ ({})", lhs, rhs),
+            FactBaseFormula::Union { lhs, rhs } => write!(f, "{} ∨ ({})", lhs, rhs),
+            FactBaseFormula::Intersection { lhs, rhs } => write!(f, "{} ∧ ({})", lhs, rhs),
             FactBaseFormula::Literal(l) => write!(f, "{}", l),
         }
     }
@@ -187,7 +187,7 @@ impl FactBase {
 
 impl fmt::Display for FactBase {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "<{}: Typ | {}>", self.context.name, self.formula)
+        write!(f, "⟨{}: Typ | {}⟩", self.context.name, self.formula)
         // write!(f, "<{}: {} | {}>", self.context.name, self.typ, self.formula) // Soon come
     }
 }
