@@ -12,6 +12,7 @@ mod error;
 mod eunit;
 mod file;
 mod format;
+mod guard_tree;
 mod new;
 mod parser;
 mod pretty;

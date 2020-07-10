@@ -746,7 +746,7 @@ impl<'a> Typer<'a> {
 
     /// Lookup a value constructor in the current scope.
     ///
-    fn get_value_constructor(
+    pub fn get_value_constructor(
         &self,
         module: Option<&String>,
         name: &str,
@@ -1518,8 +1518,7 @@ impl<'a> Typer<'a> {
         let value_typ = generalise(value_typ, self.level + 1);
 
         // Ensure the pattern matches the type of the value
-        let pattern =
-            PatternTyper::new(self, self.level).unify(pattern, value_typ.clone())?;
+        let pattern = PatternTyper::new(self, self.level).unify(pattern, value_typ.clone())?;
 
         // Check the type of the following code
         let then = self.infer(then)?;
@@ -1540,6 +1539,9 @@ impl<'a> Typer<'a> {
             self.unify(ann_typ, value_typ)
                 .map_err(|e| convert_unify_error(e, value.location()))?;
         }
+
+        let guard_tree = crate::guard_tree::construct(&pattern);
+        crate::guard_tree::construct_uncovered(guard_tree, self, &kind)?;
 
         Ok(TypedExpr::Let {
             location,
