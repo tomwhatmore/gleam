@@ -1540,8 +1540,7 @@ impl<'a> Typer<'a> {
                 .map_err(|e| convert_unify_error(e, value.location()))?;
         }
 
-        let guard_tree = crate::guard_tree::construct(&pattern);
-        crate::guard_tree::construct_uncovered(guard_tree, self, &kind)?;
+        crate::coverage_checker::construct_guard_tree(self, &pattern, typ.clone());
 
         Ok(TypedExpr::Let {
             location,
@@ -3940,6 +3939,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                             self.typer
                                 .unify(typ, instantiated_constructor_type)
                                 .map_err(|e| convert_unify_error(e, &location))?;
+
                             Ok(Pattern::Constructor {
                                 location,
                                 module,

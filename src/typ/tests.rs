@@ -1920,6 +1920,53 @@ pub fn test(x) {
 }
 
 #[test]
+fn one_test() {
+    macro_rules! assert_error {
+        ($src:expr, $error:expr $(,)?) => {
+            let (src, _) = crate::parser::strip_extra($src);
+            let mut ast = crate::grammar::ModuleParser::new()
+                .parse(&src)
+                .expect("syntax error");
+            ast.name = vec!["my_module".to_string()];
+            let ast =
+                infer_module(ast, &HashMap::new(), &mut vec![]).expect_err("should infer an error");
+            assert_eq!(($src, sort_options($error)), ($src, sort_options(ast)));
+        };
+
+        ($src:expr) => {
+            let ast = crate::grammar::ModuleParser::new()
+                .parse($src)
+                .expect("syntax error");
+            infer_module(ast, &HashMap::new(), &mut vec![]).expect_err("should infer an error");
+        };
+    }
+
+    assert_error!(
+        "pub type T {
+    A
+    B
+    C
+}
+
+pub type Maybe(a) {
+  Nothing
+  Just(a, Int)
+};
+
+pub fn main(x) {
+  let Just(A, b) = x
+  b
+}",
+        Error::NonExhaustiveBinding {
+            location: SrcSpan { start: 76, end: 81 },
+            constructor: "Ok".to_string(),
+            kind: crate::ast::BindingKind::Let,
+            unhandled_constructors: vec!["Error".to_string()],
+        }
+    );
+}
+
+#[test]
 fn infer_module_error_test() {
     macro_rules! assert_error {
         ($src:expr, $error:expr $(,)?) => {
