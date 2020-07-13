@@ -15,6 +15,7 @@ use crate::{
     bit_string::{BinaryTypeSpecifier, Error as BinaryError},
     build::Origin,
     error::GleamExpect,
+    coverage_checker::CoverageChecker,
 };
 
 use std::cell::RefCell;
@@ -1540,7 +1541,7 @@ impl<'a> Typer<'a> {
                 .map_err(|e| convert_unify_error(e, value.location()))?;
         }
 
-        crate::coverage_checker::construct_guard_tree(self, &pattern, typ.clone());
+        CoverageChecker::new(self).construct_guard_tree(&pattern, typ.clone());
 
         Ok(TypedExpr::Let {
             location,
