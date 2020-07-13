@@ -82,7 +82,7 @@ impl fmt::Display for Gdt {
 
 #[derive(Debug, PartialEq, Clone)]
 enum Literal {
-    // True,
+    True,
     False,
     DoesNotMatch {
         var: Box<Var>,
@@ -101,7 +101,7 @@ enum Literal {
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            // FactBaseLiteral::True => write!(f, "✓"),
+            Literal::True => write!(f, "✓"),
             Literal::False => write!(f, "✗"),
             Literal::DoesNotMatch { var, expr } => write!(f, "{} ≉ {}", var, expr.name()),
             Literal::Assignment { var, expr } => write!(f, "{} ← {}", expr, var),
@@ -132,39 +132,32 @@ impl fmt::Display for Formula {
 #[derive(Debug, PartialEq, Clone)]
 struct RefinementType {
     context: Var,
-    formula: Option<Formula>,
+    formula: Formula,
 }
 
 impl RefinementType {
     fn add_fact(&self, formula: Formula) -> RefinementType {
-        match &self.formula {
-            None => RefinementType {
+        match self.formula {
+            Formula::Literal(Literal::True) => RefinementType {
                 context: self.context.clone(),
-                formula: Some(formula),
+                formula: formula.clone(),
             },
-
-            Some(f) => RefinementType {
+            _ => RefinementType {
                 context: self.context.clone(),
-                formula: Some(Formula::Intersection {
+                formula: Formula::Intersection {
                     lhs: Box::new(formula.clone()),
-                    rhs: Box::new(f.clone()),
-                }),
+                    rhs: Box::new(self.formula.clone()),
+                },
             },
         }
     }
 
     fn union(&self, other_factbase: RefinementType) -> RefinementType {
-        match (&self.formula, &other_factbase.formula) {
-            (None, None) | (Some(_), None) => self.clone(),
-
-            (None, Some(_)) => other_factbase.clone(),
-
-            (Some(f), Some(other_f)) => RefinementType {
-                context: self.context.clone(),
-                formula: Some(Formula::Union {
-                    lhs: Box::new(f.clone()),
-                    rhs: Box::new(other_f.clone()),
-                }),
+        RefinementType {
+            context: self.context.clone(),
+            formula: Formula::Union {
+                lhs: Box::new(self.formula.clone()),
+                rhs: Box::new(other_factbase.formula.clone()),
             },
         }
     }
@@ -172,10 +165,7 @@ impl RefinementType {
 
 impl fmt::Display for RefinementType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &self.formula {
-            Some(formula) => write!(f, "⟨{}: Maybe A | {}⟩", self.context.name, formula),
-            None => write!(f, "⟨{}: Maybe A | ø⟩", self.context.name),
-        }
+        write!(f, "⟨{}: Maybe A | {}⟩", self.context.name, self.formula)
     }
 }
 
@@ -287,7 +277,7 @@ fn construct_uncovered_factbase(typ: Arc<Type>, guard_tree: Gdt) {
                 name: 'x'.to_string(),
                 typ: typ,
             },
-            formula: None,
+            formula: Formula::Literal(Literal::True),
         },
         guard_tree,
     );
@@ -302,7 +292,7 @@ fn u(fact_base: RefinementType, clause: Gdt) -> RefinementType {
         Gdt::Success => {
             let f = RefinementType {
                 context: fact_base.context.clone(),
-                formula: Some(Formula::Literal(Literal::False))
+                formula: Formula::Literal(Literal::False),
             };
 
             // println!("returning: {}\n", f);
