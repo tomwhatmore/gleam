@@ -81,7 +81,7 @@ impl fmt::Display for Gdt {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-enum FactBaseLiteral {
+enum Literal {
     // True,
     False,
     DoesNotMatch {
@@ -98,54 +98,54 @@ enum FactBaseLiteral {
     },
 }
 
-impl fmt::Display for FactBaseLiteral {
+impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             // FactBaseLiteral::True => write!(f, "✓"),
-            FactBaseLiteral::False => write!(f, "✗"),
-            FactBaseLiteral::DoesNotMatch { var, expr } => write!(f, "{} ≉ {}", var, expr.name()),
-            FactBaseLiteral::Assignment { var, expr } => write!(f, "{} ← {}", expr, var),
-            FactBaseLiteral::Construction { var, expr } => write!(f, "let {} = {}", var, expr),
+            Literal::False => write!(f, "✗"),
+            Literal::DoesNotMatch { var, expr } => write!(f, "{} ≉ {}", var, expr.name()),
+            Literal::Assignment { var, expr } => write!(f, "{} ← {}", expr, var),
+            Literal::Construction { var, expr } => write!(f, "let {} = {}", var, expr),
         }
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-enum FactBaseFormula {
+enum Formula {
     Union { lhs: Box<Self>, rhs: Box<Self> },
 
     Intersection { lhs: Box<Self>, rhs: Box<Self> },
 
-    Literal(FactBaseLiteral),
+    Literal(Literal),
 }
 
-impl fmt::Display for FactBaseFormula {
+impl fmt::Display for Formula {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FactBaseFormula::Union { lhs, rhs } => write!(f, "{} ∨ ({})", lhs, rhs),
-            FactBaseFormula::Intersection { lhs, rhs } => write!(f, "{} ∧ ({})", lhs, rhs),
-            FactBaseFormula::Literal(l) => write!(f, "{}", l),
+            Formula::Union { lhs, rhs } => write!(f, "{} ∨ ({})", lhs, rhs),
+            Formula::Intersection { lhs, rhs } => write!(f, "{} ∧ ({})", lhs, rhs),
+            Formula::Literal(l) => write!(f, "{}", l),
         }
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-struct FactBase {
+struct RefinementType {
     context: Var,
-    formula: Option<FactBaseFormula>,
+    formula: Option<Formula>,
 }
 
-impl FactBase {
-    fn add_fact(&self, formula: FactBaseFormula) -> FactBase {
+impl RefinementType {
+    fn add_fact(&self, formula: Formula) -> RefinementType {
         match &self.formula {
-            None => FactBase {
+            None => RefinementType {
                 context: self.context.clone(),
                 formula: Some(formula),
             },
 
-            Some(f) => FactBase {
+            Some(f) => RefinementType {
                 context: self.context.clone(),
-                formula: Some(FactBaseFormula::Intersection {
+                formula: Some(Formula::Intersection {
                     lhs: Box::new(formula.clone()),
                     rhs: Box::new(f.clone()),
                 }),
@@ -153,15 +153,15 @@ impl FactBase {
         }
     }
 
-    fn union(&self, other_factbase: FactBase) -> FactBase {
+    fn union(&self, other_factbase: RefinementType) -> RefinementType {
         match (&self.formula, &other_factbase.formula) {
             (None, None) | (Some(_), None) => self.clone(),
 
             (None, Some(_)) => other_factbase.clone(),
 
-            (Some(f), Some(other_f)) => FactBase {
+            (Some(f), Some(other_f)) => RefinementType {
                 context: self.context.clone(),
-                formula: Some(FactBaseFormula::Union {
+                formula: Some(Formula::Union {
                     lhs: Box::new(f.clone()),
                     rhs: Box::new(other_f.clone()),
                 }),
@@ -170,7 +170,7 @@ impl FactBase {
     }
 }
 
-impl fmt::Display for FactBase {
+impl fmt::Display for RefinementType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.formula {
             Some(formula) => write!(f, "⟨{}: Maybe A | {}⟩", self.context.name, formula),
@@ -282,7 +282,7 @@ impl<'a, 'b> CoverageChecker<'a, 'b> {
 
 fn construct_uncovered_factbase(typ: Arc<Type>, guard_tree: Gdt) {
     let uncovered = u(
-        FactBase {
+        RefinementType {
             context: Var {
                 name: 'x'.to_string(),
                 typ: typ,
@@ -295,17 +295,17 @@ fn construct_uncovered_factbase(typ: Arc<Type>, guard_tree: Gdt) {
     println!("{} \n\n", uncovered);
 }
 
-fn u(fact_base: FactBase, clause: Gdt) -> FactBase {
+fn u(fact_base: RefinementType, clause: Gdt) -> RefinementType {
     println!("u({}, {})", fact_base, clause);
 
     match clause {
         Gdt::Success => {
-            let f = FactBase {
+            let f = RefinementType {
                 context: fact_base.context.clone(),
-                formula: Some(FactBaseFormula::Literal(FactBaseLiteral::False))
+                formula: Some(Formula::Literal(Literal::False))
             };
 
-            println!("returning: {}\n", f);
+            // println!("returning: {}\n", f);
             f
         }
         Gdt::Branch(branches) => {
@@ -316,29 +316,29 @@ fn u(fact_base: FactBase, clause: Gdt) -> FactBase {
             // })
         }
         Gdt::Construction { var, expr, t } => u(
-            fact_base.add_fact(FactBaseFormula::Literal(FactBaseLiteral::Construction {
+            fact_base.add_fact(Formula::Literal(Literal::Construction {
                 var: var.clone(),
                 expr: expr.clone(),
             })),
             *t,
         ),
         Gdt::Assignment { var, expr, t } => {
-            let l = fact_base.add_fact(FactBaseFormula::Literal(FactBaseLiteral::DoesNotMatch {
+            let l = fact_base.add_fact(Formula::Literal(Literal::DoesNotMatch {
                 var: var.clone(),
                 expr: expr.clone(),
             }));
-            println!("l: {}", l);
+            // println!("l: {}", l);
 
             let r = u(fact_base, *t);
-            println!("r: {}", r);
+            // println!("r: {}", r);
 
-            let r1 = r.add_fact(FactBaseFormula::Literal(FactBaseLiteral::Assignment {
+            let r1 = r.add_fact(Formula::Literal(Literal::Assignment {
                 var: var.clone(),
                 expr: expr.clone(),
             }));
 
             let i = l.union(r1);
-            println!("returning: {}\n", i);
+            // println!("returning: {}\n", i);
             i
         }
     }
