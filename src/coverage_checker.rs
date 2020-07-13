@@ -122,8 +122,8 @@ enum FactBaseFormula {
 impl fmt::Display for FactBaseFormula {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FactBaseFormula::Union { lhs, rhs } => write!(f, "({} ∨ {})", lhs, rhs),
-            FactBaseFormula::Intersection { lhs, rhs } => write!(f, "({} ∧ {})", lhs, rhs),
+            FactBaseFormula::Union { lhs, rhs } => write!(f, "{} ∨ ({})", lhs, rhs),
+            FactBaseFormula::Intersection { lhs, rhs } => write!(f, "{} ∧ ({})", lhs, rhs),
             FactBaseFormula::Literal(l) => write!(f, "{}", l),
         }
     }
@@ -146,8 +146,8 @@ impl FactBase {
             Some(f) => FactBase {
                 context: self.context.clone(),
                 formula: Some(FactBaseFormula::Intersection {
-                    lhs: Box::new(f.clone()),
-                    rhs: Box::new(formula.clone()),
+                    lhs: Box::new(formula.clone()),
+                    rhs: Box::new(f.clone()),
                 }),
             },
         }
@@ -300,7 +300,10 @@ fn u(fact_base: FactBase, clause: Gdt) -> FactBase {
 
     match clause {
         Gdt::Success => {
-            let f = fact_base.add_fact(FactBaseFormula::Literal(FactBaseLiteral::False));
+            let f = FactBase {
+                context: fact_base.context.clone(),
+                formula: Some(FactBaseFormula::Literal(FactBaseLiteral::False))
+            };
 
             println!("returning: {}\n", f);
             f
@@ -326,16 +329,15 @@ fn u(fact_base: FactBase, clause: Gdt) -> FactBase {
             }));
             println!("l: {}", l);
 
-            let r1 = fact_base.add_fact(FactBaseFormula::Literal(FactBaseLiteral::Assignment {
+            let r = u(fact_base, *t);
+            println!("r: {}", r);
+
+            let r1 = r.add_fact(FactBaseFormula::Literal(FactBaseLiteral::Assignment {
                 var: var.clone(),
                 expr: expr.clone(),
             }));
-            println!("r1: {}", r1);
 
-            let r = u(r1, *t);
-            println!("r: {}", r);
-
-            let i = l.union(r);
+            let i = l.union(r1);
             println!("returning: {}\n", i);
             i
         }
