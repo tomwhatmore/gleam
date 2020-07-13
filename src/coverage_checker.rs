@@ -41,9 +41,10 @@ impl fmt::Display for ClauseExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ClauseExpr::Var(v) => write!(f, "{}", v.name),
-            ClauseExpr::RecordConstructor { name, args, .. } => {
+            ClauseExpr::RecordConstructor { name, args, .. } if args.len() > 0 => {
                 write!(f, "{} {}", name, args.join(" "))
             }
+            ClauseExpr::RecordConstructor { name, .. } => write!(f, "{}", name),
         }
     }
 }
@@ -286,7 +287,7 @@ fn construct_uncovered_factbase(typ: Arc<Type>, guard_tree: Gdt) {
 }
 
 fn u(fact_base: RefinementType, clause: Gdt) -> RefinementType {
-    println!("u({}, {})", fact_base, clause);
+    // println!("u({}, {})", fact_base, clause);
 
     match clause {
         Gdt::Success => {
