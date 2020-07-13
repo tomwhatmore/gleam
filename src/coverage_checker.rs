@@ -1,4 +1,4 @@
-use crate::ast::{CallArg, Pattern, TypedPattern};
+use crate::ast::{CallArg, Pattern, TypedPattern, TypedClause};
 use crate::typ::{Type, TypeConstructor, Typer};
 use std::fmt;
 use std::sync::Arc;
@@ -66,7 +66,7 @@ enum Gdt {
 
     Branch(Vec<Box<Self>>),
 
-    Success,
+    Success(usize),
     // Original Haskell version has ! as well
 }
 
@@ -75,8 +75,8 @@ impl fmt::Display for Gdt {
         match self {
             Gdt::Construction { var, expr, t } => write!(f, "let {} = {}, {}", var, expr, t),
             Gdt::Assignment { var, expr, t } => write!(f, "{} ← {}, {}", expr, var, t),
-            Gdt::Branch(_branches) => write!(f, "todo"),
-            Gdt::Success => write!(f, "-> x"),
+            Gdt::Branch(branches) => write!(f, "\nGuard Tree\n━━┳━┫{}\n  ┃\n  ┗━┫{}\n", branches[0], branches[1]),
+            Gdt::Success(i) => write!(f, "-> {}", i),
         }
     }
 }
@@ -180,10 +180,21 @@ impl<'a, 'b> CoverageChecker<'a, 'b> {
         Self { typer, uid: 0 }
     }
 
-    pub fn construct_guard_tree(&mut self, pattern: &TypedPattern, typ: Arc<Type>) {
-        let gdt = self.desugar_pattern(pattern, Some("x".to_string()), Gdt::Success);
+    pub fn check_pattern(&mut self, pattern: &TypedPattern, typ: Arc<Type>) {
+        let gdt = self.desugar_pattern(pattern, Some("x".to_string()), Gdt::Success(1));
         println!("{}", gdt);
         construct_uncovered_factbase(typ, gdt);
+    }
+
+    pub fn check_clauses(&mut self, clauses: &Vec<TypedClause>, typs: Vec<Arc<Type>>) {
+        let subject = self.next_variable_name();
+        let branches = clauses.into_iter().enumerate().map(|(index, clause)| {
+            Box::new(self.desugar_pattern(clause.pattern.first().unwrap(), Some(subject.clone()), Gdt::Success(index + 1)))
+        }).collect();
+
+        let gdt = Gdt::Branch(branches);
+        println!("{}", gdt);
+        construct_uncovered_factbase(typs.first().unwrap().clone(), gdt);
     }
 
     fn desugar_pattern(
@@ -221,14 +232,14 @@ impl<'a, 'b> CoverageChecker<'a, 'b> {
 
                 let var = Box::new(Var {
                     typ: constructor.typ.clone(),
-                    name: var_name.unwrap_or_else(|| self.next_variable_name(true)),
+                    name: var_name.unwrap_or_else(|| self.next_variable_name()),
                 });
 
                 let mut vars = vec![];
 
                 args.into_iter().rev().for_each(|arg| {
                     let CallArg { value, .. } = arg;
-                    let name = self.next_variable_name(true);
+                    let name = self.next_variable_name();
                     vars.push(name.clone());
 
                     t = self.desugar_pattern(value, Some(name), t.clone());
@@ -248,9 +259,9 @@ impl<'a, 'b> CoverageChecker<'a, 'b> {
         }
     }
 
-    fn next_variable_name(&mut self, assignment: bool) -> String {
+    fn next_variable_name(&mut self) -> String {
         let alphabet_length = 26;
-        let char_offset = if assignment { 121 } else { 97 }; // TODO
+        let char_offset = 97;
         let mut chars = vec![];
         let mut n;
         let mut rest = self.uid;
@@ -290,7 +301,7 @@ fn u(fact_base: RefinementType, clause: Gdt) -> RefinementType {
     // println!("u({}, {})", fact_base, clause);
 
     match clause {
-        Gdt::Success => {
+        Gdt::Success(_) => {
             let f = RefinementType {
                 context: fact_base.context.clone(),
                 formula: Formula::Literal(Literal::False),

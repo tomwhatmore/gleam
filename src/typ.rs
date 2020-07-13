@@ -1541,7 +1541,7 @@ impl<'a> Typer<'a> {
                 .map_err(|e| convert_unify_error(e, value.location()))?;
         }
 
-        CoverageChecker::new(self).construct_guard_tree(&pattern, typ.clone());
+        CoverageChecker::new(self).check_pattern(&pattern, typ.clone());
 
         Ok(TypedExpr::Let {
             location,
@@ -1584,6 +1584,12 @@ impl<'a> Typer<'a> {
                 .map_err(|e| convert_unify_error(e, typed_clause.then.location()))?;
             typed_clauses.push(typed_clause);
         }
+
+        CoverageChecker::new(self).check_clauses(
+            &typed_clauses,
+            subject_types.clone(),
+        ); // TODO
+
         Ok(TypedExpr::Case {
             location,
             typ: return_type,
@@ -1647,11 +1653,6 @@ impl<'a> Typer<'a> {
             typed_alternatives
                 .push(pattern_typer.infer_alternative_multi_pattern(m, subjects, &location)?);
         }
-
-        CoverageChecker::new(self).construct_guard_tree(
-            &typed_pattern.first().unwrap(),
-            subjects.first().unwrap().clone(),
-        ); // TODO
 
         Ok((typed_pattern, typed_alternatives))
     }

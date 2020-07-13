@@ -1956,6 +1956,7 @@ pub type Maybe(a) {
 pub fn main(x: Maybe(T)) {
     case x {
         Just(A) -> 1
+        Just(B) -> 2
     }
 }",
         Error::NonExhaustiveBinding {
