@@ -23,14 +23,27 @@ enum ClauseExpr {
     RecordConstructor {
         name: String,
         type_constructor: TypeConstructor,
+        args: Vec<String>,
     },
+}
+
+impl ClauseExpr {
+    fn name(&self) -> String {
+        match self {
+            ClauseExpr::Var(v) => v.name.clone(),
+
+            ClauseExpr::RecordConstructor { name, .. } => name.clone(),
+        }
+    }
 }
 
 impl fmt::Display for ClauseExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ClauseExpr::Var(v) => write!(f, "{}", v.name),
-            ClauseExpr::RecordConstructor { name, .. } => write!(f, "{}", name),
+            ClauseExpr::RecordConstructor { name, args, .. } => {
+                write!(f, "{} {}", name, args.join(" "))
+            }
         }
     }
 }
@@ -69,7 +82,7 @@ impl fmt::Display for Gdt {
 
 #[derive(Debug, PartialEq, Clone)]
 enum FactBaseLiteral {
-    True,
+    // True,
     False,
     DoesNotMatch {
         var: Box<Var>,
@@ -88,9 +101,9 @@ enum FactBaseLiteral {
 impl fmt::Display for FactBaseLiteral {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FactBaseLiteral::True => write!(f, "✓"),
+            // FactBaseLiteral::True => write!(f, "✓"),
             FactBaseLiteral::False => write!(f, "✗"),
-            FactBaseLiteral::DoesNotMatch { var, expr } => write!(f, "{} ≉ {}", var, expr),
+            FactBaseLiteral::DoesNotMatch { var, expr } => write!(f, "{} ≉ {}", var, expr.name()),
             FactBaseLiteral::Assignment { var, expr } => write!(f, "{} ← {}", expr, var),
             FactBaseLiteral::Construction { var, expr } => write!(f, "let {} = {}", var, expr),
         }
@@ -109,8 +122,8 @@ enum FactBaseFormula {
 impl fmt::Display for FactBaseFormula {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FactBaseFormula::Union { lhs, rhs } => write!(f, "{} ∨ ({})", lhs, rhs),
-            FactBaseFormula::Intersection { lhs, rhs } => write!(f, "{} ∧ ({})", lhs, rhs),
+            FactBaseFormula::Union { lhs, rhs } => write!(f, "({} ∨ {})", lhs, rhs),
+            FactBaseFormula::Intersection { lhs, rhs } => write!(f, "({} ∧ {})", lhs, rhs),
             FactBaseFormula::Literal(l) => write!(f, "{}", l),
         }
     }
@@ -119,26 +132,39 @@ impl fmt::Display for FactBaseFormula {
 #[derive(Debug, PartialEq, Clone)]
 struct FactBase {
     context: Var,
-    formula: FactBaseFormula,
+    formula: Option<FactBaseFormula>,
 }
 
 impl FactBase {
     fn add_fact(&self, formula: FactBaseFormula) -> FactBase {
-        FactBase {
-            context: self.context.clone(),
-            formula: FactBaseFormula::Union {
-                lhs: Box::new(self.formula.clone()),
-                rhs: Box::new(formula.clone()),
+        match &self.formula {
+            None => FactBase {
+                context: self.context.clone(),
+                formula: Some(formula),
+            },
+
+            Some(f) => FactBase {
+                context: self.context.clone(),
+                formula: Some(FactBaseFormula::Intersection {
+                    lhs: Box::new(f.clone()),
+                    rhs: Box::new(formula.clone()),
+                }),
             },
         }
     }
 
-    fn intersect(&self, other_factbase: FactBase) -> FactBase {
-        FactBase {
-            context: self.context.clone(),
-            formula: FactBaseFormula::Intersection {
-                lhs: Box::new(self.formula.clone()),
-                rhs: Box::new(other_factbase.formula.clone()),
+    fn union(&self, other_factbase: FactBase) -> FactBase {
+        match (&self.formula, &other_factbase.formula) {
+            (None, None) | (Some(_), None) => self.clone(),
+
+            (None, Some(_)) => other_factbase.clone(),
+
+            (Some(f), Some(other_f)) => FactBase {
+                context: self.context.clone(),
+                formula: Some(FactBaseFormula::Union {
+                    lhs: Box::new(f.clone()),
+                    rhs: Box::new(other_f.clone()),
+                }),
             },
         }
     }
@@ -146,8 +172,10 @@ impl FactBase {
 
 impl fmt::Display for FactBase {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "⟨{}: Typ | {}⟩", self.context.name, self.formula)
-        // write!(f, "<{}: {} | {}>", self.context.name, self.typ, self.formula) // TODO: Need to write display code for Type
+        match &self.formula {
+            Some(formula) => write!(f, "⟨{}: Maybe A | {}⟩", self.context.name, formula),
+            None => write!(f, "⟨{}: Maybe A | ø⟩", self.context.name),
+        }
     }
 }
 
@@ -158,14 +186,11 @@ pub struct CoverageChecker<'a, 'b> {
 
 impl<'a, 'b> CoverageChecker<'a, 'b> {
     pub fn new(typer: &'a Typer<'b>) -> Self {
-        Self {
-            typer,
-            uid: 0,
-        }
+        Self { typer, uid: 0 }
     }
 
     pub fn construct_guard_tree(&mut self, pattern: &TypedPattern, typ: Arc<Type>) {
-        let gdt = self.desugar_pattern(pattern, Gdt::Success);
+        let gdt = self.desugar_pattern(pattern, Some("x".to_string()), Gdt::Success);
         println!("{}", gdt);
         construct_uncovered_factbase(typ, gdt);
     }
@@ -173,51 +198,68 @@ impl<'a, 'b> CoverageChecker<'a, 'b> {
     fn desugar_pattern(
         &mut self,
         pattern: &TypedPattern,
+        var_name: Option<String>,
         mut t: Gdt,
     ) -> Gdt {
         match pattern {
             Pattern::Constructor {
                 module, name, args, ..
             } => {
-                let constructor = self.typer.get_value_constructor(module.as_ref(), name).unwrap().clone();
+                let constructor = self
+                    .typer
+                    .get_value_constructor(module.as_ref(), name)
+                    .unwrap()
+                    .clone();
 
                 let type_constructor = match &*constructor.typ {
-                    Type::App { ref name, .. } => self.typer.get_type_constructor(module, name).unwrap().clone(),
+                    Type::App { ref name, .. } => self
+                        .typer
+                        .get_type_constructor(module, name)
+                        .unwrap()
+                        .clone(),
                     Type::Fn { retrn, .. } => match &**retrn {
-                        Type::App { ref name, .. } => self.typer.get_type_constructor(module, name).unwrap().clone(),
+                        Type::App { ref name, .. } => self
+                            .typer
+                            .get_type_constructor(module, name)
+                            .unwrap()
+                            .clone(),
                         _ => unreachable!(),
                     },
                     _ => unreachable!(),
                 };
 
-                let expr = Box::new(ClauseExpr::RecordConstructor {
+                let var = Box::new(Var {
+                    typ: constructor.typ.clone(),
+                    name: var_name.unwrap_or_else(|| self.next_variable_name(true)),
+                });
+
+                let mut vars = vec![];
+
+                args.into_iter().rev().for_each(|arg| {
+                    let CallArg { value, .. } = arg;
+                    let name = self.next_variable_name(true);
+                    vars.push(name.clone());
+
+                    t = self.desugar_pattern(value, Some(name), t.clone());
+                });
+
+                Gdt::Assignment {
+                    var,
+                    expr: Box::new(ClauseExpr::RecordConstructor {
                         name: name.clone(),
                         type_constructor,
-                    });
-
-                let var = Box::new(Var {
-                        typ: constructor.typ.clone(),
-                        name: self.next_variable_name(true),
-                    });
-
-                args
-                    .into_iter()
-                    .rev()
-                    .for_each(|arg| {
-                        let CallArg { value, .. } = arg;
-
-                        t = self.desugar_pattern(value, t.clone());
-                    });
-
-                Gdt::Assignment { expr, var, t: Box::new(t) }
-            },
+                        args: vars,
+                    }),
+                    t: Box::new(t),
+                }
+            }
             _ => t,
         }
     }
 
     fn next_variable_name(&mut self, assignment: bool) -> String {
         let alphabet_length = 26;
-        let char_offset = if assignment { 120 } else { 97 };
+        let char_offset = if assignment { 121 } else { 97 }; // TODO
         let mut chars = vec![];
         let mut n;
         let mut rest = self.uid;
@@ -245,57 +287,57 @@ fn construct_uncovered_factbase(typ: Arc<Type>, guard_tree: Gdt) {
                 name: 'x'.to_string(),
                 typ: typ,
             },
-            formula: FactBaseFormula::Literal(FactBaseLiteral::True),
+            formula: None,
         },
         guard_tree,
     );
 
-    println!("{}", uncovered);
+    println!("{} \n\n", uncovered);
 }
 
 fn u(fact_base: FactBase, clause: Gdt) -> FactBase {
     println!("u({}, {})", fact_base, clause);
 
     match clause {
-        Gdt::Success => FactBase {
-            context: fact_base.context.clone(),
-            formula: FactBaseFormula::Literal(FactBaseLiteral::False),
-        },
+        Gdt::Success => {
+            let f = fact_base.add_fact(FactBaseFormula::Literal(FactBaseLiteral::False));
+
+            println!("returning: {}\n", f);
+            f
+        }
         Gdt::Branch(branches) => {
             u(u(fact_base, *branches[0].clone()), *branches[1].clone())
+            // TODO: Support arbitrary number of branches
             // branches.into_iter().fold(fact_base, |acc, branch| {
             //     u(u(fact_base, branch), )
             // })
         }
-        Gdt::Construction { var, expr , t } => u(
-            fact_base.add_fact(FactBaseFormula::Literal(
-                FactBaseLiteral::Construction { var: var.clone(), expr: expr.clone() },
-            )),
+        Gdt::Construction { var, expr, t } => u(
+            fact_base.add_fact(FactBaseFormula::Literal(FactBaseLiteral::Construction {
+                var: var.clone(),
+                expr: expr.clone(),
+            })),
             *t,
         ),
         Gdt::Assignment { var, expr, t } => {
-            let l = fact_base
-            .add_fact(FactBaseFormula::Literal(FactBaseLiteral::DoesNotMatch {
+            let l = fact_base.add_fact(FactBaseFormula::Literal(FactBaseLiteral::DoesNotMatch {
                 var: var.clone(),
                 expr: expr.clone(),
             }));
             println!("l: {}", l);
 
-            let r = u(
-                fact_base.add_fact(FactBaseFormula::Literal(
-                    FactBaseLiteral::Assignment {
-                        var: var.clone(),
-                        expr: expr.clone(),
-                    },
-                )),
-                *t,
-            );
-            println!("r: {}", l);
+            let r1 = fact_base.add_fact(FactBaseFormula::Literal(FactBaseLiteral::Assignment {
+                var: var.clone(),
+                expr: expr.clone(),
+            }));
+            println!("r1: {}", r1);
 
-            let i = l.intersect(r);
-            println!("intersect: {}", i);
+            let r = u(r1, *t);
+            println!("r: {}", r);
+
+            let i = l.union(r);
+            println!("returning: {}\n", i);
             i
         }
-
     }
 }

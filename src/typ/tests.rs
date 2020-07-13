@@ -1950,12 +1950,13 @@ fn one_test() {
 
 pub type Maybe(a) {
   Nothing
-  Just(a, Int)
+  Just(a)
 };
 
-pub fn main(x) {
-  let Just(A, b) = x
-  b
+pub fn main(x: Maybe(T)) {
+    case x {
+        Just(A) -> 1
+    }
 }",
         Error::NonExhaustiveBinding {
             location: SrcSpan { start: 76, end: 81 },

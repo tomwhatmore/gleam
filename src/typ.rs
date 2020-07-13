@@ -14,8 +14,8 @@ use crate::{
     },
     bit_string::{BinaryTypeSpecifier, Error as BinaryError},
     build::Origin,
-    error::GleamExpect,
     coverage_checker::CoverageChecker,
+    error::GleamExpect,
 };
 
 use std::cell::RefCell;
@@ -1647,6 +1647,11 @@ impl<'a> Typer<'a> {
             typed_alternatives
                 .push(pattern_typer.infer_alternative_multi_pattern(m, subjects, &location)?);
         }
+
+        CoverageChecker::new(self).construct_guard_tree(
+            &typed_pattern.first().unwrap(),
+            subjects.first().unwrap().clone(),
+        ); // TODO
 
         Ok((typed_pattern, typed_alternatives))
     }
