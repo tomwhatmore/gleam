@@ -75,7 +75,8 @@ impl fmt::Display for Gdt {
         match self {
             Gdt::Construction { var, expr, t } => write!(f, "let {} = {}, {}", var, expr, t),
             Gdt::Assignment { var, expr, t } => write!(f, "{} ← {}, {}", expr, var, t),
-            Gdt::Branch(branches) => write!(f, "\nGuard Tree\n━━┳━┫{}\n  ┃\n  ┗━┫{}\n", branches[0], branches[1]),
+            Gdt::Branch(branches) if branches.len() > 1 => write!(f, "\nGuard Tree\n━━┳━┫{}\n  ┃\n  ┗━┫{}\n", branches[0], branches[1]),
+            Gdt::Branch(branches) => write!(f, "{}", branches[0]),
             Gdt::Success(i) => write!(f, "-> {}", i),
         }
     }
@@ -309,14 +310,17 @@ fn u(fact_base: RefinementType, clause: Gdt) -> RefinementType {
 
             // println!("returning: {}\n", f);
             f
-        }
-        Gdt::Branch(branches) => {
+        },
+        Gdt::Branch(branches) if branches.len() > 1 => {
             u(u(fact_base, *branches[0].clone()), *branches[1].clone())
             // TODO: Support arbitrary number of branches
             // branches.into_iter().fold(fact_base, |acc, branch| {
             //     u(u(fact_base, branch), )
             // })
         }
+        Gdt::Branch(branches) => {
+            u(fact_base, *branches[0].clone())
+        },
         Gdt::Construction { var, expr, t } => u(
             fact_base.add_fact(Formula::Literal(Literal::Construction {
                 var: var.clone(),
@@ -342,6 +346,6 @@ fn u(fact_base: RefinementType, clause: Gdt) -> RefinementType {
             let i = l.union(r1);
             // println!("returning: {}\n", i);
             i
-        }
+        },
     }
 }
