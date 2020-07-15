@@ -1585,10 +1585,7 @@ impl<'a> Typer<'a> {
             typed_clauses.push(typed_clause);
         }
 
-        CoverageChecker::new(self).check_clauses(
-            &typed_clauses,
-            subject_types.clone(),
-        ); // TODO
+        CoverageChecker::new(self).check_clauses(&typed_clauses, subject_types.clone()); // TODO
 
         Ok(TypedExpr::Case {
             location,
